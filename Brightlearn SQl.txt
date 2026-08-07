@@ -1,0 +1,298 @@
+----TRANSFORM DATA PROCESS | SILVER DATA -----
+
+----Step 1: Identify the columns in the table 
+select * 
+from `bright_coffee`.`sales`.`coffee_dataset` limit 10;
+
+---Step 2: Check all columns are in correct format
+
+---Step 2.1: Unit price needs to be changed from string to a number as it is currently a string
+
+Select 
+REPLACE (Unit_price,',','.') AS Unit_price
+from  bright_coffee.sales.coffee_dataset;
+
+---Step 2.2: Convert string into a number | ABC -> 1.2 which indicates there is decimals in the column 
+
+Select 
+CAST(REPLACE(Unit_price,',','.') AS double) AS Unit_price
+from  bright_coffee.sales.coffee_dataset;
+
+----Step 3: Check number of records 
+
+Select Count(*)
+from bright_coffee.sales.coffee_dataset;
+
+--- Step 4: Check for duplicates | Any dupplicates will appear with the value 2 in the last column 
+
+Select *,
+Count(*) 
+From bright_coffee.sales.coffee_dataset
+Group By All
+Having count(*)> 1;
+
+----Conclusion:Therefore the above syntax shows no Duplicates have been found. 
+----How do we work with columns with no duplicates 
+
+---Step 5: Check for Null Values | If any of the condtions are met then Syntax will return that entire row  | In this data set, no null values have been found 
+
+Select *
+from  bright_coffee.sales.coffee_dataset
+Where Transaction_id is NULL OR Transaction_date is NULL OR Transaction_time is NULL OR Transaction_qty is NULL OR Store_id is NULL OR Store_location is NULL OR Product_id is NULL OR Unit_price is NULL OR Product_category is NULL OR Product_type is NULL OR Product_detail is NULL;
+
+
+--------------------------------------------------------------------------------------------
+
+------DATA PROCESSING: Answering the Business Questions | GOLD DATA 
+
+---Question 1: Total revenue | Total Revenue = Unit Price X Quantity Sold | This is the foundation for profitability analysis 
+
+Select 
+sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)) AS Total_revenue
+From bright_coffee.sales.coffee_dataset;
+
+---Question 1.1: Rounding off Total Revenue to 2 decimal places 
+
+Select 
+round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)),2) AS Total_revenue
+From bright_coffee.sales.coffee_dataset;
+
+----Question 1.2: Calculating total revenue per product category this will help us identy how much was made per category 
+
+Select 
+Product_category,
+round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)), 2) AS Total_revenue
+From bright_coffee.sales.coffee_dataset
+Group by 1;
+
+---Question 2: Calculating total revnue of product category and product detail 
+
+Select 
+Product_category,
+Product_detail,
+round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)), 2) AS Total_revenue
+From bright_coffee.sales.coffee_dataset
+Group by All;
+
+
+----Question 2.1: Calculating revenue by store location 
+
+Select Store_location, 
+round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)), 2) AS Total_revenue
+From bright_coffee.sales.coffee_dataset
+Group by store_location
+Order by total_revenue desc;
+
+----Question 2.2: Calculating Average Transaction Value : 
+
+Select 
+Avg (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)), 2 AS Avg_Transaction_Value 
+From    bright_coffee.sales.coffee_dataset
+Group By All;
+
+---Question 2.3: Calculating the top product type 
+
+Select product_type,
+round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)), 2) AS total_revenue
+from bright_coffee.sales.coffee_dataset
+Group by product_type
+Order by total_revenue desc
+Limit 5;
+
+---Question 2.4: . Store Efficiency (Revenue per Transaction per Store) | This measures how much revenue each store generates per transaction.
+
+SELECT 
+    store_id,
+    store_location,
+   round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)) / COUNT(DISTINCT transaction_id),1) AS revenue_per_transaction
+FROM bright_coffee.sales.coffee_dataset
+GROUP BY store_id, store_location
+ORDER BY revenue_per_transaction DESC;
+
+
+----Question 3: Calculating total revenue based on the time of the day 
+---First identify the max and min time before we can define the time ranges : 6am  Morning and 20:59 Evening
+Select 
+Min(Transaction_time),
+Max(Transaction_time )
+From bright_coffee.sales.coffee_dataset;
+
+-- Define Time ranges 
+-- 6am to 11:59pm > Morning 
+--12pm to 16:59pm > Afternoon
+--17:00 to 20:59 > Evening 
+
+
+----Below buckets sales per time 
+Select 
+date_format(transaction_time,"HH:mm:ss") AS time_only,
+CASE
+ When Time_only Between '06:00:00' AND  '11:59:00' THEN 'Morning'
+ When Time_only Between '12:00:00' and '17:00:59' THEN 'Afternoon'
+ When Time_only Between '18:00:00' and '20:59:59' THEN 'Evening'
+    Else 'Night'
+    End AS Time_bucket
+From bright_coffee.sales.coffee_dataset;
+
+----Time replaced with the actual syntax 
+
+SELECT
+    CASE    
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '06:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '12:00:00' AND '16:59:59' THEN 'Afternoon'
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '17:00:00' AND '19:59:59' THEN 'Evening'
+        ELSE 'Night'
+    END AS time_bucket
+FROM bright_coffee.sales.coffee_dataset;
+
+
+
+
+------ Question 4: Calculating the total revenue per time buck per Morning, Afternoon, Evening 
+SELECT
+    CASE    
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '06:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '12:00:00' AND '16:59:59' THEN 'Afternoon'
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '17:00:00' AND '19:59:59' THEN 'Evening'
+        ELSE 'Night'
+    END AS time_bucket,
+    SUM(transaction_qty * CAST(REPLACE(unit_price,',','.') AS DECIMAL(10,2))) AS Total_Revenue
+FROM bright_coffee.sales.coffee_dataset
+GROUP BY ALL;
+
+---Question 5: Shows which hours of the day generate the most revenue.
+
+SELECT DAYOFWEEK(transaction_date) AS day_of_week,
+       SUM(transaction_qty * CAST(REPLACE(unit_price,',','.') AS DECIMAL(10,2))) AS Total_Revenue
+FROM bright_coffee.sales.coffee_dataset
+GROUP BY DAYOFWEEK(transaction_date)
+ORDER BY day_of_week; 
+
+---- Question 6: Identifies which weekday consistently generates the highest revenue 
+
+SELECT 
+    CASE DAYOFWEEK(transaction_date)
+        WHEN 1 THEN 'Monday'
+        WHEN 2 THEN 'Tuesday'
+        WHEN 3 THEN 'Wednesday'
+        WHEN 4 THEN 'Thursday'
+        WHEN 5 THEN 'Friday'
+        WHEN 6 THEN 'Saturday'
+        WHEN 7 THEN 'Sunday'
+    END AS day_name,
+    SUM(transaction_qty * CAST(REPLACE(unit_price,',','.') AS DECIMAL(10,2))) AS Total_Revenue
+FROM bright_coffee.sales.coffee_dataset
+GROUP BY day_name
+ORDER BY total_revenue DESC;
+
+---- Question 7: Calculates which product category dominates at different times of the day 
+
+SELECT
+Product_category,
+    CASE    
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '06:00:00' AND '11:59:59' THEN 'Morning'
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '12:00:00' AND '16:59:59' THEN 'Afternoon'
+        WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '17:00:00' AND '19:59:59' THEN 'Evening'
+        ELSE 'Night'
+    END AS time_bucket,
+    SUM(transaction_qty * CAST(REPLACE(unit_price,',','.') AS DECIMAL(10,2))) AS Total_Revenue
+FROM bright_coffee.sales.coffee_dataset
+GROUP BY ALL;
+
+---- Question 8: Calculating the highest revenue product category per time bucket (Morning, Afternoon, Evening, Night):
+
+
+WITH bucketed_revenue AS (
+    SELECT 
+        product_category,
+        CASE    
+            WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '06:00:00' AND '11:59:59' THEN 'Morning'
+            WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '12:00:00' AND '16:59:59' THEN 'Afternoon'
+            WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '17:00:00' AND '19:59:59' THEN 'Evening'
+            ELSE 'Night'
+        END AS time_bucket,
+        SUM(transaction_qty * CAST(REPLACE(unit_price, ',', '.') AS DECIMAL(10,2))) AS total_revenue
+    FROM bright_coffee.sales.coffee_dataset
+    GROUP BY product_category,
+             CASE    
+                 WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '06:00:00' AND '11:59:59' THEN 'Morning'
+                 WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '12:00:00' AND '16:59:59' THEN 'Afternoon'
+                 WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '17:00:00' AND '19:59:59' THEN 'Evening'
+                 ELSE 'Night'
+             END
+)
+SELECT time_bucket, product_category, total_revenue
+FROM (
+    SELECT time_bucket, product_category, total_revenue,
+           ROW_NUMBER() OVER (PARTITION BY time_bucket ORDER BY total_revenue DESC) AS rank
+    FROM bucketed_revenue
+) ranked
+WHERE rank = 1
+ORDER BY time_bucket;
+
+
+---- Date Extraction : Calculate which month made the most sales : Month_name, Month_Id,Day_name
+
+Select 
+transaction_date,
+Monthname (transaction_date) AS Month_name
+From  bright_coffee.sales.coffee_dataset;
+
+---Calculating Month_Id
+
+Select 
+transaction_date,
+Monthname (transaction_date) AS Month_name,
+date_format(transaction_date,'yyyy-MMM') AS Month_id
+From  bright_coffee.sales.coffee_dataset;
+
+---To get day_name
+
+Select 
+transaction_date,
+Monthname (transaction_date) AS Month_name,
+Month(Transaction_date) AS Month_number,
+date_format(transaction_date,'yyyy-MMM') AS Month_id,
+dayname(transaction_date) As day_name,
+dayofweek (transaction_date) AS day_number
+From  bright_coffee.sales.coffee_dataset;
+
+---Total revenue for Store Location
+
+Select 
+store_location,
+round(sum (transaction_qty * CAST(REPLACE(Unit_price,',','.') AS double)), 2) AS total_revenue
+from bright_coffee.sales.coffee_dataset
+Group by All;
+
+
+----------------------------------------------------------------------------------------
+---The below shows the on which day amount of transactions were made | we can also find the number of products that were sold  
+
+
+Select 
+
+transaction_date,
+Monthname (transaction_date) AS Month_name,
+Month(Transaction_date) AS Month_number,
+date_format(transaction_date,'yyyy-MMM') AS Month_id,
+dayname(transaction_date) As Day_name,
+dayofweek (transaction_date) AS Day_number,
+count(transaction_id) AS Transaction_count,
+count (product_id) AS Product_sold,
+Product_category,
+Product_detail,
+Product_type,
+store_location,
+CASE    
+            WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '06:00:00' AND '11:59:59' THEN 'Morning'
+            WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '12:00:00' AND '16:59:59' THEN 'Afternoon'
+            WHEN date_format(transaction_time, 'HH:mm:ss') BETWEEN '17:00:00' AND '19:59:59' THEN 'Evening'
+            ELSE 'Night'
+        END AS Time_bucket,
+SUM(transaction_qty * CAST(REPLACE(unit_price, ',', '.') AS DECIMAL(10,2))) AS Total_revenue
+from bright_coffee.sales.coffee_dataset
+Group by All;
+
+
+
