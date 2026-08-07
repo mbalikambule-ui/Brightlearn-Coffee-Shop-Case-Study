@@ -60,4 +60,5 @@ Astoria: Wednesday is the peak sales day, outperforming other weekdays.
 7. Total Revenue per Month
 Findings: Revenue rises steadily from January to June, peaking in June (R166,465). The sharp increase from March to April shows strong seasonal demand.
 
+<img width="480" height="480" alt="GoodMorningCoffeeGIFbyIZEA" src="https://github.com/user-attachments/assets/b30f4ab5-461d-4643-bdcf-3458be76031c" />
 
